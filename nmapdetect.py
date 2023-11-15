@@ -25,16 +25,17 @@ tcp_flags_map = {
 def detect_nmap_scan(packet):
 	# Make sure it is a TCP packet
 	if packet.haslayer(scapy.TCP):
-		print("[+] Possible Zmap scan detected from {}:{}".format(packet[scapy.IP].src, packet[scapy.TCP].sport))
-            	print("Flag is: {}".format(flags))
-	        print("Packet length is: {}".format(len(packet)))
-	        packet.show()
-	        print("")
-	        print(packet.raw_packet_cache)
-	        for i in packet.fields:
-	        	print(i, packet.fields[i])
-	        packet.payload.show()
-	        print("Packet header???: {}".format(str(packet)[:(packet[scapy.IP].ihl * 4)]))
+		#print("[+] Possible Zmap scan detected from {}:{}".format(packet[scapy.IP].src, packet[scapy.TCP].sport))
+		#print("Flag is: {}".format(packet[scapy.TCP].flags))
+		#print("Packet length is: {}".format(len(packet)))
+		#packet.show()
+		#print(packet.raw_packet_cache)
+		#for i in packet.fields:
+		#	print(i, packet.fields[i])
+		#print("IP id is: {}".format(packet[scapy.IP].id)) # Useful
+		#print("Packet payload:")
+		#packet.payload.show() # Useful
+		#print("Packet header???: {}".format(str(packet)[:(packet[scapy.IP].ihl * 4)]))
 
 		src_ip = packet[scapy.IP].src
 		dst_ip = packet[scapy.IP].dst
@@ -48,6 +49,11 @@ def detect_nmap_scan(packet):
 		# Calculate a value representing the packet's TCP flags
 		tcp_flags = packet[scapy.TCP].flags
 		
+
+		if packet[scapy.IP].id == 54321:
+			print("[+] Maybe Zmap was here")
+
+
 		# Use the map inpsired from Wireshark documentation to calculate conversation completeness
 		if str(tcp_flags) in tcp_flags_map:			
 			if conversation_id in conversation_completeness:
@@ -97,6 +103,6 @@ def main(interface):
 
 if __name__ == "__main__":
 	threshold = 5 # Adjust the threshold as needed, sensitivity on both -sS and full connect scans
-	my_ip = "192.168.56.101" # Change this to your IP
-	interface = "enp0s3"  # Change this to your network interface
+	my_ip = "172.16.210.134" # Change this to your IP
+	interface = "ens33"  # Change this to your network interface
 	main(interface)
