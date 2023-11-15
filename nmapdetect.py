@@ -25,6 +25,17 @@ tcp_flags_map = {
 def detect_nmap_scan(packet):
 	# Make sure it is a TCP packet
 	if packet.haslayer(scapy.TCP):
+		print("[+] Possible Zmap scan detected from {}:{}".format(packet[scapy.IP].src, packet[scapy.TCP].sport))
+            	print("Flag is: {}".format(flags))
+	        print("Packet length is: {}".format(len(packet)))
+	        packet.show()
+	        print("")
+	        print(packet.raw_packet_cache)
+	        for i in packet.fields:
+	        	print(i, packet.fields[i])
+	        packet.payload.show()
+	        print("Packet header???: {}".format(str(packet)[:(packet[scapy.IP].ihl * 4)]))
+
 		src_ip = packet[scapy.IP].src
 		dst_ip = packet[scapy.IP].dst
 		src_port = packet[scapy.TCP].sport
