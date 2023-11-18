@@ -1,0 +1,136 @@
+### Previously nmapdetec.py, renamed and with more functionality towards TCP based port 
+## Ideas for program: "bonsaiviking - they see me scannin they hatin"
+## TODO: Threshold value is reused - it shouldn't be..
+## TODO: Make the "known services" detection method keep a track of which unused ports each scanning IP has probed
+
+import scapy.all as scapy
+
+# Dictionary to track TCP conversation completeness by source and destination IP pairs
+conversation_completeness = {}
+# Dictionary to count incomplete conversations by source IP
+incomplete_conversations_count = {}
+
+# Dictionary for tracking sources of traffic (used for Stealth detection)
+sources_of_traffic_stealth = {}
+
+# Dictionary for tracking attempts on not hosted ports
+sources_of_traffic_ports = {}
+
+# Mapped using https://www.wireshark.org/docs/wsug_html_chunked/ChAdvTCPAnalysis.html as inspiration
+tcp_flags_map = {
+	"S": 1, #SYN
+	"SA": 2, #SYN-ACK
+	"A": 4, #ACK
+	"PA": 8, #Using PSH flag (combined with ACK) as indicator of DATA
+	"FA": 16, #Using FIN in combination with ACK as indicator of finished conversation
+	"RA": 32, #RST in combination with ACK as indicator of reset conversation
+}
+
+
+def detect_TCP_scan(packet):
+	# Make sure it is a TCP packet
+	if packet.haslayer(scapy.TCP):
+		#print("[+] Possible Zmap scan detected from {}:{}".format(packet[scapy.IP].src, packet[scapy.TCP].sport))
+		#print("Flag is: {}".format(packet[scapy.TCP].flags))
+		#print("Packet length is: {}".format(len(packet)))
+		#packet.show()
+		#print(packet.raw_packet_cache)
+		#for i in packet.fields:
+		#	print(i, packet.fields[i])
+		#print("IP id is: {}".format(packet[scapy.IP].id)) # Useful
+		#print("Packet payload:")
+		#packet.payload.show() # Useful
+		#print("Packet header???: {}".format(str(packet)[:(packet[scapy.IP].ihl * 4)]))
+		
+		# Declaring easy to reference variables 
+		src_ip = packet[scapy.IP].src
+		dst_ip = packet[scapy.IP].dst
+		src_port = packet[scapy.TCP].sport
+		dst_port = packet[scapy.TCP].dport
+
+		# Calculate a unique conversation identifier based on source and destination IPs and ports, initially only used in "Conversation Completeness detection"
+		conversation_id = hash(str(sorted((f"{src_ip}:{src_port}-{dst_ip}:{dst_port}"))))
+		
+############# Checking for conversation completeness as an indicator of port scanning #############
+############# Inpsired by Wireshark Conversation Completeness #############
+		# Calculate a value representing the packet's TCP flags
+		tcp_flags = packet[scapy.TCP].flags
+
+		if str(tcp_flags) in tcp_flags_map:			
+			if conversation_id in conversation_completeness:
+				conversation_completeness[conversation_id] |= tcp_flags_map[str(tcp_flags)]
+			else:
+				conversation_completeness[conversation_id] = tcp_flags_map[str(tcp_flags)]
+			
+		# For debugging purposes a notice of completed conversations
+		if conversation_completeness[conversation_id] == 31 or conversation_completeness[conversation_id] == 47 or conversation_completeness[conversation_id] == 63:  # This indicates a complete conversation with data transfer (SYN, SYN-ACK, ACK, DATA, FIN)
+			print(f"[+] Complete conversation with data transfer: {conversation_id} \n {conversation_completeness}")
+			print("********************************* \n")
+
+		# Check for incomplete conversations
+		if not (conversation_completeness[conversation_id] == 31 or conversation_completeness[conversation_id] == 47 or conversation_completeness[conversation_id] == 63):
+			# Disregards you own IP when potentially generating alerts, FIXME: maybe not the right way to do it?
+			if src_ip != my_ip:
+				if src_ip in incomplete_conversations_count:
+					incomplete_conversations_count[src_ip] += 1
+					if incomplete_conversations_count[src_ip] >= threshold: 
+						print(f"[+] Possible Port Scan from {src_ip} as it has meet or exceeded **{threshold}** number of incomplete conversations \n Number of incomplete conversations: {incomplete_conversations_count[src_ip]}")
+						print("********************************* \n")
+				else:
+					incomplete_conversations_count[src_ip] = 1
+			else:
+				pass
+		
+
+############# Zmap Detection #############
+		# Based on the default IP Id set by Zmap
+		if packet[scapy.IP].id == 54321:
+			print("[+] Maybe Zmap was here")
+			print("********************************* \n")
+
+
+############# Nmap half-open (stealth) scan Detection #############
+############# Detects based on the default settings of Nmap -sS #############
+		# Detecting -sS scans based on SYN flag, Small Window Size (1024) and small TCP header lenght (26)
+		if packet[scapy.TCP].flags == 0x02 and packet[scapy.TCP].window==1024 and len(packet[scapy.TCP]) == 26:
+			# Mechanism (if the program is left running) which captures slow scans
+			if src_ip in sources_of_traffic_stealth:
+				sources_of_traffic_stealth[src_ip] += 1
+				if sources_of_traffic_stealth[src_ip] >= threshold:  # Adjust the threshold as needed
+					print(f"[+] Possible Nmap STEALTH scan detected from {src_ip}:{packet[scapy.TCP].sport}")
+					print("********************************* \n")
+					
+			else:
+				sources_of_traffic_stealth[src_ip] = 1
+
+############# Method for detecting port scans, based on prior knowledge and mapping of own services #############
+############# Basically keeps track of a threshold of probes to IP's/Ports known not to have a service running #############
+############# Based on inspiration from Jung et al. 2004, Fast Portscan Detection Using Sequential Hypothesis Testing #############
+	
+		# A dictionary containing which hosts (IP's) has services on defined ports within our network
+		known_services = {
+			my_ip: [443, 22] # Adjust ports for hosted services as needed
+		}
+		
+		if dst_ip == my_ip:
+			if int(dst_port) not in [port for ports in known_services.values() for port in ports]:
+				if src_ip in sources_of_traffic_ports:
+					sources_of_traffic_ports[src_ip] += 1
+					if sources_of_traffic_ports[src_ip] >= threshold:  # Adjust the threshold as needed
+						print(f"[+] Possible port scan detected, based on probes to unused ports, meeting or exceeding threshold: **{threshold}** \n From:  {src_ip}")
+						print("********************************* \n")
+			
+				else:
+					sources_of_traffic_ports[src_ip] = 1
+			
+def main(interface):
+	try:
+		scapy.sniff(iface=interface, store=False, prn=detect_TCP_scan)
+	except KeyboardInterrupt:
+		print("[-] Stopping the scan detection tool.")
+
+if __name__ == "__main__":
+	threshold = 5 # Adjust the threshold as needed, sensitivity on both -sS and full connect scans
+	my_ip = "192.168.56.106" # Change this to your IP
+	interface = "enp0s3"  # Change this to your network interface
+	main(interface)
