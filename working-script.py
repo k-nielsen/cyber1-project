@@ -27,6 +27,12 @@ tcp_flags_map = {
 # Dictionary to store packet count per source IP
 packet_count = defaultdict(int)
 
+# Maybe not needed after all...
+# def elapsed_time(ip_src):
+#     current_time = time.time()
+#     elapsed_time = current_time - packet_count[ip_src]['timestamp']
+#     return elapsed_time
+
 # Function to calculate packet rate
 def calculate_packet_rate(ip_src):
     current_time = time.time()
@@ -40,7 +46,7 @@ def calculate_packet_rate(ip_src):
 # Function to handle packet callback
 def packet_callback(packet):
     if packet.haslayer(scapy.IP):
-        is_zmap(packet)
+        
         ip_src = packet[scapy.IP].src
         ip_dst = packet[scapy.IP].dst
         # print(ip_src)
@@ -51,12 +57,14 @@ def packet_callback(packet):
             
             # Check for high packet rate
             packet_rate = calculate_packet_rate(ip_src)
-            if packet_rate > 1000:  # Adjust the threshold as needed
+            if packet_rate > 10000:  # Adjust the threshold as needed
                 print(f"High packet rate detected from {ip_src} to {ip_dst} on port {tcp_dport}")
+                is_zmap(packet)
 
             # Check for large packet size
             if len(packet) > 1500:  # Adjust the threshold as needed
                 print(f"Large packet size detected from {ip_src} to {ip_dst} on port {tcp_dport}")
+                is_zmap(packet)
 
             # Update packet count for the source IP
             if ip_src in packet_count:
@@ -147,17 +155,12 @@ def detect_TCP_scan(packet):
 def is_zmap(packet):
     # Based on the default IP Id set by Zmap
         if packet[scapy.IP].id == 54321:
-            print("[+] Maybe Zmap was here")
+            print("[+] Potential ZMap scan")
             print("********************************* \n")
-
-# Sniff packets on the specified network interface
-# You may need to adjust the interface based on your setup
-# scapy.sniff(prn=detect_TCP_scan, store=0, iface="ens33")
-
 
 def main(interface):
 	try:
-		scapy.sniff(iface=interface, store=False, prn=detect_TCP_scan)
+		scapy.sniff(iface=interface, store=False, prn=packet_callback)
 	except KeyboardInterrupt:
 		print("[-] Stopping the scan detection tool.")
 
@@ -167,3 +170,27 @@ if __name__ == "__main__":
 	interface = "ens33"  # Change this to your network interface
 	main(interface)
 
+
+# Experiment:
+# Shared time frame (e.g. 10 seconds)
+# Calculate the packet rate using the script
+# (Maybe test how fast the scanners are to sending the packets??)
+
+# Setup:
+# Script runs on VM0 along with Wireshark (using capture filters) and a Python http server (python3 -m http.server -)
+# Two sepearate VMs (one running both Nmap and ZMap and the other only running ZMap):
+# VM running both ZMap and Nmap: Send 10 packets with the default settings on port 22 and port 8080
+# VM only running ZMap: send 10 packets with default flags on port 8080
+#
+# Example commands with place holders
+# sudo zmap IP -p 22
+# sudo zmap IP -p 69
+# nmap -p 22,80 IP
+
+# Results (to be written in the report):
+# The script intercepted x packets from vm1 and y packet from vm 2...
+
+
+# After Wednesday:
+# Look into using ML on our existing pcap files and the one we produced in the
+# experiment (potentially along with some more training data e.g. just some web browsing)
