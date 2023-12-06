@@ -57,13 +57,14 @@ def packet_callback(packet):
             
             # Check for high packet rate
             packet_rate = calculate_packet_rate(ip_src)
-            if packet_rate > 10000:  # Adjust the threshold as needed
-                print(f"High packet rate detected from {ip_src} to {ip_dst} on port {tcp_dport}")
+            if packet_rate > 1376:  # The average packet rate from 10 different ZMap default scans
+                print(f"High packet rate detected from {ip_src} to {ip_dst} on port {tcp_dport} with packet rate: {packet_rate}")
                 is_zmap(packet)
 
+            # print(len(packet))
             # Check for large packet size
-            if len(packet) > 1500:  # Adjust the threshold as needed
-                print(f"Large packet size detected from {ip_src} to {ip_dst} on port {tcp_dport}")
+            if len(packet) > 50:  # Adjust the threshold as needed
+                print(f"Large packet size detected from {ip_src} to {ip_dst} on port {tcp_dport} with packet length {len(packet)}")
                 is_zmap(packet)
 
             # Update packet count for the source IP
@@ -73,7 +74,7 @@ def packet_callback(packet):
             else:
                 packet_count[ip_src] = {'count': 1, 'timestamp': time.time()}
             # packet_count[ip_src] = {'count': packet_count[ip_src]['count'] + 1, 'timestamp': time.time()}
-            print(packet_count)
+            print(f"Packet counts dict: {packet_count}")
           
           
 def detect_TCP_scan(packet):
@@ -177,20 +178,23 @@ if __name__ == "__main__":
 # (Maybe test how fast the scanners are to sending the packets??)
 
 # Setup:
-# Script runs on VM0 along with Wireshark (using capture filters) and a Python http server (python3 -m http.server -)
-# Two sepearate VMs (one running both Nmap and ZMap and the other only running ZMap):
-# VM running both ZMap and Nmap: Send 10 packets with the default settings on port 22 and port 8080
-# VM only running ZMap: send 10 packets with default flags on port 8080
+# Script runs on VM0 along with Wireshark (using capture filters) and a Python http server (python3 -m http.server 8080)
+# Three sepearate VMs:
+# VM1 running ZMap: send 10 packets with default flags on port 22
+# VM2 running ZMap: send 10 packets with default flags on port 8080
+# VM3 running Nmap: Send 10 packets with the default settings on port 22 and port 8080
+
+# The VMs need to be in NAT mode (network setting).
 #
 # Example commands with place holders
 # sudo zmap IP -p 22
-# sudo zmap IP -p 69
+# sudo zmap IP -p 8080
 # nmap -p 22,80 IP
 
 # Results (to be written in the report):
 # The script intercepted x packets from vm1 and y packet from vm 2...
 
 
-# After Wednesday:
+# After submitting draft on Wednesday:
 # Look into using ML on our existing pcap files and the one we produced in the
 # experiment (potentially along with some more training data e.g. just some web browsing)
